@@ -8,15 +8,22 @@
 	},
 	"id": "kai.frame-inspector",
 	"name": "Frame Inspector",
-	"version": "v1.0.0",
+	"version": "v1.1.0",
 	"developer": "Kai",
 	"description": "Load a macro, let the bot measure every click's frame window, then play with the windows shown in the level.",
-	"tags": ["gameplay", "utility", "interface"],
+	"tags": [
+		"gameplay",
+		"utility",
+		"interface"
+	],
 	"dependencies": {
 		"geode.node-ids": ">=v1.23.3"
 	},
 	"settings": {
-		"display-title": { "type": "title", "name": "Display" },
+		"display-title": {
+			"type": "title",
+			"name": "Display"
+		},
 		"toggle-overlay": {
 			"type": "keybind",
 			"name": "Show / hide everything",
@@ -27,14 +34,34 @@
 		"count-mode": {
 			"type": "string",
 			"name": "Counter counts",
-			"description": "Whole level: totals for the level. Passed this attempt: counts go up as you pass the clicks.",
-			"default": "Whole level",
-			"one-of": ["Whole level", "Passed this attempt"]
+			"description": "As you click: each number goes up when you hit that click. Passed this attempt: goes up as you pass the clicks. Whole level: totals.",
+			"default": "As you click",
+			"one-of": [
+				"As you click",
+				"Passed this attempt",
+				"Whole level"
+			]
+		},
+		"marker-mode": {
+			"type": "string",
+			"name": "Circles",
+			"description": "When you click: a circle with the frame window pops up where you click or release. Always: every circle is shown ahead of time.",
+			"default": "When you click",
+			"one-of": [
+				"When you click",
+				"Always (show ahead)"
+			]
+		},
+		"attempt-banner": {
+			"type": "bool",
+			"name": "1 frames banner",
+			"description": "Every new attempt, show how many 1 frames (and under 1 frame clicks) the level has.",
+			"default": true
 		},
 		"show-releases": {
 			"type": "bool",
-			"name": "Show releases",
-			"description": "Releases get smaller markers. Turn off to only show clicks (they're usually huge windows on cube).",
+			"name": "Releases that matter",
+			"description": "Count and show releases, but only the ones that change anything (wave, ship, swing...). Releases with a huge window, like on cube, are always skipped.",
 			"default": true
 		},
 		"marker-scale": {
@@ -43,7 +70,11 @@
 			"default": 1.0,
 			"min": 0.3,
 			"max": 3.0,
-			"control": { "slider": true, "slider-step": 0.1, "arrows": false }
+			"control": {
+				"slider": true,
+				"slider-step": 0.1,
+				"arrows": false
+			}
 		},
 		"marker-decimals": {
 			"type": "bool",
@@ -58,7 +89,10 @@
 			"min": 1,
 			"max": 20
 		},
-		"scan-title": { "type": "title", "name": "Scanning" },
+		"scan-title": {
+			"type": "title",
+			"name": "Scanning"
+		},
 		"scan-releases": {
 			"type": "bool",
 			"name": "Scan releases",
