@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <Geode/binding/FMODAudioEngine.hpp>
+#include <Geode/binding/GJGameLevel.hpp>
 #include <Geode/binding/LevelSettingsObject.hpp>
 #include <Geode/binding/PlayLayer.hpp>
 #include <Geode/binding/PlayerObject.hpp>
@@ -19,7 +20,7 @@ constexpr char const* kOverlayID = "frame-inspector-overlay"_spr;
 constexpr char const* kMarkersID = "frame-inspector-markers"_spr;
 constexpr char const* kLiveID = "frame-inspector-live"_spr;
 constexpr float kMatchRange = 75.f;  // how far (in level units, 30 = one block) your click may be from the bot's
-constexpr float kPassMargin = 30.f;  // a hit click counts once you're a block past it (still alive)
+constexpr double kMatchTime = 0.15;  // ...or how far apart in time (seconds)
 bool s_hidden = false;
 
 ccColor4F c4(ccColor3B c, float a) { return {c.r / 255.f, c.g / 255.f, c.b / 255.f, a}; }
@@ -84,8 +85,9 @@ bool FIOverlay::init(PlayLayer* pl) {
 }
 
 CCNode* FIOverlay::playerParent() {
-    CCNode* parent = m_pl->m_player1 ? m_pl->m_player1->getParent() : nullptr;
-    return parent ? parent : m_pl->m_objectLayer;
+    // circles live in the object layer, so they scroll with the level
+    if (m_pl->m_objectLayer) return m_pl->m_objectLayer;
+    return m_pl->m_player1 ? m_pl->m_player1->getParent() : nullptr;
 }
 
 void FIOverlay::applyVisibility() {
@@ -102,6 +104,7 @@ void FIOverlay::rebuild() {
     if (m_live) { m_live->removeFromParent(); m_live = nullptr; }
     if (m_counter) { m_counter->removeFromParent(); m_counter = nullptr; }
     if (m_hardest) { m_hardest->removeFromParent(); m_hardest = nullptr; }
+    if (m_debug) { m_debug->removeFromParent(); m_debug = nullptr; }
     m_countLabels.clear();
     m_events.clear();
     m_labels.clear();
@@ -132,6 +135,8 @@ void FIOverlay::rebuild() {
         ev.down = e.down;
         ev.button = e.button;
         ev.player2 = e.player2;
+        ev.px = e.px;
+        ev.time = e.time >= 0 ? e.time : static_cast<double>(e.frame + 1) / r.tps;
         bool ok = e.status == EventStatus::Ok;
         double f = r.framesOf(e);
         bool overCap = e.capped || f >= std::floor(displayMax + 1e-9);
@@ -161,7 +166,12 @@ void FIOverlay::rebuild() {
     buildHardest(r);
     m_counts.assign(m_totals.size(), 0);
     m_passedIdx = 0;
-    m_pending.clear();
+    if (Mod::get()->getSettingValue<bool>("debug-info")) {
+        m_debug = label("Frame Inspector: waiting for your first click", "chatFont.fnt", 0.5f, {220, 220, 220}, {0.f, 0.f});
+        m_debug->setPosition(6.f, 4.f);
+        m_debug->setID("debug"_spr);
+        this->addChild(m_debug, 60);
+    }
     refreshCounts();
     cullLabels();
     applyVisibility();
@@ -174,8 +184,13 @@ void FIOverlay::ding(Ev const& e) {
     std::error_code ec;
     std::string path;
     if (!custom.empty() && std::filesystem::exists(custom, ec)) path = geode::utils::string::pathToString(custom);
-    else path = e.down ? "ding.ogg"_spr : "ding-release.ogg"_spr;
+    else {
+        auto file = Mod::get()->getResourcesDir() / (e.down ? "ding.ogg" : "ding-release.ogg");
+        path = std::filesystem::exists(file, ec) ? geode::utils::string::pathToString(file)
+                                                 : std::string(e.down ? "ding.ogg"_spr : "ding-release.ogg"_spr);
+    }
     if (auto fmod = FMODAudioEngine::get()) fmod->playEffect(path);
+    log::debug("Frame Inspector: ding {}", path);
 }
 
 void FIOverlay::drawCircle(CCNode* parent, CCDrawNode* draw, Ev const& e, CCPoint c, bool animate) {
@@ -267,6 +282,11 @@ void FIOverlay::buildHardest(LevelResults const& r) {
     int maxRows = static_cast<int>(Mod::get()->getSettingValue<int64_t>("hardest-count"));
     if (maxRows < 1) maxRows = 6;
 
+    if (r.version < 2) {
+        auto warn = label("Old scan: rescan this level for best results", "bigFont.fnt", 0.26f, {255, 200, 80}, {1.f, 0.5f});
+        warn->setPosition(x, y + 12.f);
+        m_hardest->addChild(warn);
+    }
     auto title = label(fmt::format("1 frames: {}", m_oneFrames), "goldFont.fnt", 0.55f,
                        m_oneFrames > 0 ? m_buckets[0].color : ccColor3B{255, 255, 255}, {1.f, 0.5f});
     title->setPosition(x, y);
@@ -338,7 +358,9 @@ void FIOverlay::showAttemptBanner() {
     auto win = CCDirector::get()->getWinSize();
     auto node = CCNode::create();
     node->setID("attempt-banner"_spr);
-    std::string text = m_oneFrames == 1 ? "1 frames: 1" : fmt::format("1 frames: {}", m_oneFrames);
+    std::string name = m_pl->m_level ? std::string(m_pl->m_level->m_levelName) : "";
+    std::string text = name.empty() ? fmt::format("1 frames: {}", m_oneFrames)
+                                    : fmt::format("{} has {} one frame{}", name, m_oneFrames, m_oneFrames == 1 ? "" : "s");
     auto main = label(text, "goldFont.fnt", 0.75f, m_oneFrames > 0 ? m_buckets[0].color : ccColor3B{255, 255, 255}, {0.5f, 0.5f});
     main->setPosition(win.width / 2, win.height * 0.72f);
     node->addChild(main);
@@ -356,7 +378,6 @@ void FIOverlay::showAttemptBanner() {
 void FIOverlay::onReset() {
     m_passedIdx = 0;
     m_counts.assign(m_totals.size(), 0);
-    m_pending.clear();
     for (auto& e : m_events) e.used = false;
     if (m_live) m_live->removeAllChildren();
     refreshCounts();
@@ -364,41 +385,49 @@ void FIOverlay::onReset() {
     showAttemptBanner();
 }
 
-void FIOverlay::onPlayerInput(bool down, int button, bool player2) {
-    if (m_events.empty()) return;
-    auto player = player2 && m_pl->m_player2 ? m_pl->m_player2 : m_pl->m_player1;
-    if (!player) return;
-    float px = player->m_position.x;
-    float py = player->m_position.y;
+void FIOverlay::onPlayerInput(PlayerObject* player, bool down, int button, bool player2) {
+    if (m_events.empty() || !player || m_pl->m_isPaused) return;
+    CCPoint drawn = objectLayerPos(m_pl, player);
+    float physX = player->m_position.x;
+    double now = m_pl->m_gameState.m_levelTime;
     bool twoPlayer = m_pl->m_levelSettings && m_pl->m_levelSettings->m_twoPlayerMode;
 
-    // match this input to the nearest scanned input of the same kind that you haven't hit yet
-    auto key = [](Ev const& a, float v) { return a.x < v; };
-    size_t lo = static_cast<size_t>(std::lower_bound(m_events.begin(), m_events.end(), px - kMatchRange, key) - m_events.begin());
+    // Find the bot's input of the same kind (click/release, same button) you haven't hit yet that is closest
+    // to you, by where you are OR by when it is (whichever is closer, so it works even if one of them is off).
     Ev* best = nullptr;
-    float bestDist = kMatchRange + 1.f;
-    for (size_t i = lo; i < m_events.size() && m_events[i].x <= px + kMatchRange; i++) {
-        auto& e = m_events[i];
+    double bestScore = 1e18, nearDx = 1e18, nearDt = 1e18;
+    for (auto& e : m_events) {
         if (e.used || e.down != down || e.button != static_cast<uint8_t>(button)) continue;
         if (twoPlayer && e.player2 != player2) continue;
-        float d = std::abs(e.x - px);
-        if (d < bestDist) { bestDist = d; best = &e; }
+        double dx = std::min(std::abs(e.x - drawn.x), std::abs(e.px - physX));
+        double dt = std::abs(e.time - now);
+        double score = std::min(dx / kMatchRange, dt / kMatchTime);
+        if (score < bestScore) { bestScore = score; best = &e; nearDx = dx; nearDt = dt; }
     }
-    if (!best) return;
+    char const* what = down ? "click" : "release";
+    if (!best || bestScore > 1.0) {
+        if (m_debug)
+            m_debug->setString(best ? fmt::format("FI: {} at {:.0f} / {:.2f}s - no match (closest is {:.0f} units, {:.2f}s away)", what, drawn.x, now, nearDx, nearDt).c_str()
+                                    : fmt::format("FI: {} - nothing of this kind left to match", what).c_str());
+        return;
+    }
     best->used = true;
-    // the counter only goes up once you've actually made it past this click
-    if (m_countMode == CountMode::AsYouClick) m_pending.push_back(static_cast<size_t>(best - m_events.data()));
+    if (m_debug)
+        m_debug->setString(fmt::format("FI: {} at {:.0f} / {:.2f}s - hit a {} ({:.0f} units, {:.2f}s off)", what, drawn.x, now, best->text, nearDx, nearDt).c_str());
+
+    // the counter goes up the moment you do it
+    if (m_countMode == CountMode::AsYouClick) bump(best->bucket, best->sub);
     if (m_markerMode == MarkerMode::OnClick && m_live && !s_hidden) {
         auto draw = CCDrawNode::create();
         m_live->addChild(draw);
-        drawCircle(m_live, draw, *best, {px, py}, true);
+        drawCircle(m_live, draw, *best, drawn, true);
     }
     ding(*best);
 }
 
 void FIOverlay::cullLabels() {
     if (m_labels.empty() || !m_pl->m_player1) return;
-    float px = m_pl->m_player1->m_position.x;
+    float px = objectLayerPos(m_pl, m_pl->m_player1).x;
     float w = CCDirector::get()->getWinSize().width;
     auto key = [](std::pair<float, CCNode*> const& a, float v) { return a.first < v; };
     size_t lo = static_cast<size_t>(std::lower_bound(m_labels.begin(), m_labels.end(), px - 2.5f * w, key) - m_labels.begin());
@@ -414,20 +443,8 @@ void FIOverlay::cullLabels() {
 
 void FIOverlay::onPlayerProgress() {
     cullLabels();
-    if (!m_pending.empty() && m_pl->m_player1 && !m_pl->m_player1->m_isDead) {
-        float px = m_pl->m_player1->m_position.x;
-        auto it = std::remove_if(m_pending.begin(), m_pending.end(), [&](size_t i) {
-            auto const& e = m_events[i];
-            auto p = e.player2 && m_pl->m_player2 ? m_pl->m_player2 : m_pl->m_player1;
-            float x = p ? p->m_position.x : px;
-            if (x < e.x + kPassMargin) return false;
-            bump(e.bucket, e.sub);
-            return true;
-        });
-        m_pending.erase(it, m_pending.end());
-    }
     if (m_countMode != CountMode::Passed || m_events.empty() || !m_pl->m_player1) return;
-    float px = m_pl->m_player1->m_position.x;
+    float px = objectLayerPos(m_pl, m_pl->m_player1).x;
     size_t before = m_passedIdx;
     while (m_passedIdx < m_events.size() && m_events[m_passedIdx].x <= px) {
         auto const& e = m_events[m_passedIdx];

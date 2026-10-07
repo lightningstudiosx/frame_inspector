@@ -31,6 +31,7 @@ struct PlayerSample {
 
 struct TickSample {
     PlayerSample p1, p2;
+    double time = 0;      // level time in seconds (used to recognise your clicks later)
     bool dual = false;
     bool valid = false;
 };
@@ -69,7 +70,9 @@ struct EventResult {
     uint8_t button = 1;
     bool player2 = false;
     bool down = true;
-    float x = 0, y = 0;         // where the player was when the input happened
+    float x = 0, y = 0;         // where the player was drawn when the input happened (marker spot)
+    float px = 0;               // physics x at that moment
+    double time = -1;           // level time (s) at that moment, -1 = unknown
     int left = 0;               // furthest earlier shift (<= 0) that still survives
     int right = 0;              // furthest later shift (>= 0) that still survives
     int windowTicks = 0;        // right - left + 1

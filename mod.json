@@ -8,7 +8,7 @@
 	},
 	"id": "kai.frame-inspector",
 	"name": "Frame Inspector",
-	"version": "v1.2.0",
+	"version": "v1.3.0",
 	"developer": "Kai",
 	"description": "Load a macro, let the bot measure every click's frame window, then play with the windows shown in the level.",
 	"tags": [
@@ -45,7 +45,7 @@
 		"counter-rows": {
 			"type": "string",
 			"name": "Counter rows",
-			"description": "Where each counter row starts, in frames. Default 1,2,3,4,5,7,9,16 gives 1, 2, 3, 4, 5-6, 7-8, 9-15, 16+. Example: 1,2,3,4,5,7,9,15 with Counter ends at 31 gives ... 9-14, 15-30, 31+.",
+			"description": "Where each counter row starts, in frames. Easier: use the Ranges button in the FI menu.",
 			"default": "1,2,3,4,5,7,9,16"
 		},
 		"counter-max": {
@@ -96,6 +96,12 @@
 			"default": 6,
 			"min": 1,
 			"max": 20
+		},
+		"debug-info": {
+			"type": "bool",
+			"name": "Show click info",
+			"description": "A small line in the bottom left that says what your last click matched (or why it didn't). Handy if circles or dings don't show up.",
+			"default": true
 		},
 		"attempt-banner": {
 			"type": "bool",

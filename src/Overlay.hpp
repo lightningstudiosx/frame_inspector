@@ -21,7 +21,7 @@ public:
 
     void rebuild();               // after new results or option changes
     void onPlayerProgress();      // every frame while playing
-    void onPlayerInput(bool down, int button, bool player2);  // you clicked / released
+    void onPlayerInput(PlayerObject* player, bool down, int button, bool player2);  // you clicked / released
     void onReset();               // new attempt
     void updateScanStatus();      // show/refresh/hide the scanning banner
 
@@ -41,6 +41,8 @@ protected:
         bool player2 = false;
         bool used = false;        // you already hit this one this attempt
         double frames = 0;        // its window in frames
+        float px = 0;             // physics x when the bot did it
+        double time = 0;          // level time (s) when the bot did it
         std::string text;
         cocos2d::ccColor3B color;
     };
@@ -65,6 +67,7 @@ protected:
     cocos2d::CCNode* m_hardest = nullptr;
     cocos2d::CCNode* m_scanBox = nullptr;
     cocos2d::CCLabelBMFont* m_scanLabel = nullptr;
+    cocos2d::CCLabelBMFont* m_debug = nullptr;
     cocos2d::CCLayerColor* m_scanBar = nullptr;
 
     CountMode m_countMode = CountMode::AsYouClick;
@@ -77,7 +80,6 @@ protected:
     std::vector<int> m_totals;                           // per bucket (+1 for "<1")
     std::vector<int> m_counts;                           // this attempt
     size_t m_passedIdx = 0;
-    std::vector<size_t> m_pending;   // clicks you hit that count once you've got past them
     int m_oneFrames = 0, m_subFrames = 0;
     std::vector<std::pair<float, cocos2d::CCNode*>> m_labels;  // ahead-marker labels sorted by x (only nearby ones drawn)
     size_t m_visLo = 0, m_visHi = 0;

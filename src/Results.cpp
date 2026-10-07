@@ -110,10 +110,12 @@ bool saveResults(LevelResults const& r, std::string& err) {
         int flags = (e.capped ? 1 : 0) | (e.limited ? 2 : 0) | (e.exact ? 4 : 0);
         a.push(matjson::Value(static_cast<std::intmax_t>(flags)));
         a.push(matjson::Value(static_cast<std::intmax_t>(e.status)));
+        a.push(matjson::Value(static_cast<double>(e.px)));
+        a.push(matjson::Value(e.time));
         ev.push(a);
     }
     auto root = matjson::makeObject({
-        {"version", 1},
+        {"version", 2},
         {"levelKey", r.levelKey},
         {"levelName", r.levelName},
         {"macro", r.macroName},
@@ -148,6 +150,7 @@ std::optional<LevelResults> loadResults(std::string const& levelKey) {
     r.maxTicks = static_cast<int>(root["maxTicks"].asInt().unwrapOr(64));
     r.offset = static_cast<int>(root["offset"].asInt().unwrapOr(0));
     r.endDetected = root["endDetected"].asBool().unwrapOr(true);
+    r.version = static_cast<int>(root["version"].asInt().unwrapOr(1));
     if (!(r.tps > 0) || !(r.fps > 0) || r.maxTicks <= 0) return std::nullopt;
     auto events = root["events"].asArray();
     if (events.isErr()) return std::nullopt;
@@ -168,6 +171,13 @@ std::optional<LevelResults> loadResults(std::string const& levelKey) {
         e.limited = flags & 2;
         e.exact = flags & 4;
         e.status = a[10].asInt().unwrapOr(0) == 0 ? EventStatus::Ok : EventStatus::Unreliable;
+        if (a.size() >= 13) {
+            e.px = static_cast<float>(a[11].asDouble().unwrapOr(0));
+            e.time = a[12].asDouble().unwrapOr(-1);
+        } else {
+            e.px = e.x;
+            e.time = -1;
+        }
         r.events.push_back(e);
     }
     return r;

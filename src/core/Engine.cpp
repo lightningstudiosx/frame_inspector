@@ -390,6 +390,8 @@ void Engine::scheduleEvent(Backend& b) {
                 auto const& smp = m_ref[static_cast<size_t>(at)];
                 r.x = in.player2 && smp.dual ? smp.p2.vx : smp.p1.vx;
                 r.y = in.player2 && smp.dual ? smp.p2.vy : smp.p1.vy;
+                r.px = in.player2 && smp.dual ? smp.p2.x : smp.p1.x;
+                r.time = smp.time;
             }
             m_result.events.push_back(r);
             m_ev++;
@@ -414,6 +416,8 @@ void Engine::finishEvent(EventStatus st) {
         auto const& smp = m_ref[static_cast<size_t>(at)];
         r.x = in.player2 && smp.dual ? smp.p2.vx : smp.p1.vx;
         r.y = in.player2 && smp.dual ? smp.p2.vy : smp.p1.vy;
+        r.px = in.player2 && smp.dual ? smp.p2.x : smp.p1.x;
+        r.time = smp.time;
     }
     m_result.events.push_back(r);
     m_ev++;

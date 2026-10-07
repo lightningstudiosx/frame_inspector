@@ -70,17 +70,28 @@ void GeodeBackend::stepTick() {
     inTick = false;
 }
 
+CCPoint objectLayerPos(PlayLayer* pl, PlayerObject* p) {
+    // where the player is drawn, in the object layer's space (that's where the circles live)
+    auto pos = p->getPosition();
+    auto parent = p->getParent();
+    auto layer = pl->m_objectLayer;
+    if (!parent || !layer || parent == layer) return pos;
+    return layer->convertToNodeSpace(parent->convertToWorldSpace(pos));
+}
+
 TickSample GeodeBackend::sample() const {
     TickSample s;
     s.valid = true;
     s.dual = pl->m_gameState.m_isDualMode;
-    auto fill = [](PlayerObject* p, PlayerSample& out) {
+    s.time = pl->m_gameState.m_levelTime;
+    auto fill = [this](PlayerObject* p, PlayerSample& out) {
         if (!p) return;
         out.x = p->m_position.x;
         out.y = p->m_position.y;
         out.yv = p->m_yVelocity;
-        out.vx = p->m_position.x;  // markers live in the same layer as the player
-        out.vy = p->m_position.y;
+        auto drawn = objectLayerPos(pl, p);
+        out.vx = drawn.x;
+        out.vy = drawn.y;
     };
     fill(pl->m_player1, s.p1);
     if (s.dual) fill(pl->m_player2, s.p2);
@@ -289,6 +300,7 @@ void ScanController::finish() {
         r.maxTicks = res.maxTicks;
         r.offset = res.offset;
         r.endDetected = res.endDetected;
+        r.version = 2;
         r.events = res.events;
         std::string err;
         if (!saveResults(r, err)) log::warn("Frame Inspector: couldn't save results: {}", err);

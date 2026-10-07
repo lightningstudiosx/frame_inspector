@@ -12,6 +12,9 @@
 
 namespace fi {
 
+// where a player is drawn, in PlayLayer::m_objectLayer space
+cocos2d::CCPoint objectLayerPos(PlayLayer* pl, PlayerObject* p);
+
 class GeodeBackend final : public Backend {
 public:
     PlayLayer* pl = nullptr;

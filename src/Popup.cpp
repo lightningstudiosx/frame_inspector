@@ -1,5 +1,7 @@
 #include "Popup.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 #include <Geode/binding/ButtonSprite.hpp>
@@ -142,12 +144,17 @@ bool FIPopup::init(PauseLayer* pause) {
     auto clearSpr = ButtonSprite::create("Clear", "goldFont.fnt", "GJ_button_06.png", 0.8f);
     clearSpr->setScale(0.75f);
     m_buttonMenu->addChildAtPosition(CCMenuItemSpriteExtra::create(clearSpr, this, menu_selector(FIPopup::onClear)),
-                                     Anchor::Bottom, {-110.f, 28.f});
+                                     Anchor::Bottom, {-50.f, 28.f});
+
+    auto rangesSpr = ButtonSprite::create("Ranges", "goldFont.fnt", "GJ_button_05.png", 0.8f);
+    rangesSpr->setScale(0.75f);
+    m_buttonMenu->addChildAtPosition(CCMenuItemSpriteExtra::create(rangesSpr, this, menu_selector(FIPopup::onRanges)),
+                                     Anchor::Bottom, {-135.f, 28.f});
 
     m_scanSpr = ButtonSprite::create("Scan level", "goldFont.fnt", "GJ_button_01.png", 0.8f);
     m_scanSpr->setScale(0.85f);
     m_buttonMenu->addChildAtPosition(CCMenuItemSpriteExtra::create(m_scanSpr, this, menu_selector(FIPopup::onScan)),
-                                     Anchor::Bottom, {20.f, 28.f});
+                                     Anchor::Bottom, {70.f, 28.f});
 
     auto helpSpr = CCSprite::createWithSpriteFrameName("GJ_infoIcon_001.png");
     helpSpr->setScale(0.7f);
@@ -284,6 +291,10 @@ void FIPopup::onClear(CCObject*) {
     (void)sc;
 }
 
+void FIPopup::onRanges(CCObject*) {
+    if (auto p = FIRangesPopup::create()) p->show();
+}
+
 void FIPopup::onHelp(CCObject*) {
     FLAlertLayer::create(nullptr, "How it works",
         "The bot replays your macro, then moves <cy>one click at a time</c> earlier and later, tick by tick, "
@@ -294,6 +305,187 @@ void FIPopup::onHelp(CCObject*) {
         "TPS must match the macro. Practice mode and start positions must be off. Releases get markers too (smaller rings). "
         "<co>?</c> markers mean the bot couldn't reproduce that moment exactly (usually random triggers).",
         "OK", nullptr, 380.f)->show();
+}
+
+// ------------------------------------------------------------------ counter ranges editor
+
+namespace {
+constexpr int kRemoveTagBase = 5000;
+std::string joinStarts(std::vector<int> const& v) {
+    std::string out;
+    for (size_t i = 0; i < v.size(); i++) out += (i ? "," : "") + std::to_string(v[i]);
+    return out;
+}
+} // namespace
+
+FIRangesPopup* FIRangesPopup::create() {
+    auto ret = new FIRangesPopup();
+    if (ret->setup()) {
+        ret->autorelease();
+        return ret;
+    }
+    delete ret;
+    return nullptr;
+}
+
+double FIRangesPopup::scanMax() const {
+    auto& sc = ScanController::get();
+    auto pl = PlayLayer::get();
+    if (sc.results && pl && sc.resultsLevelKey == ScanController::levelKey(pl)) return sc.results->maxFrames();
+    return Mod::get()->getSavedValue<double>("max-frames", 16.0);
+}
+
+bool FIRangesPopup::setup() {
+    if (!Popup::init(380.f, 250.f)) return false;
+    this->setTitle("Counter ranges");
+
+    m_starts = parseBucketStarts(Mod::get()->getSettingValue<std::string>("counter-rows"));
+    m_end = Mod::get()->getSettingValue<double>("counter-max");
+
+    auto help = CCLabelBMFont::create("Each box is one row of the top-left counter. X removes a row.", "chatFont.fnt");
+    help->setScale(0.6f);
+    m_mainLayer->addChildAtPosition(help, Anchor::Center, {0.f, 78.f});
+
+    m_chips = CCNode::create();
+    m_mainLayer->addChildAtPosition(m_chips, Anchor::Center, {0.f, 40.f});
+
+    m_addInput = TextInput::create(70.f, "e.g. 15");
+    m_addInput->setLabel("New row starts at");
+    m_addInput->setCommonFilter(CommonFilter::Uint);
+    m_mainLayer->addChildAtPosition(m_addInput, Anchor::Center, {-120.f, -18.f});
+    auto addSpr = ButtonSprite::create("Add", "goldFont.fnt", "GJ_button_01.png", 0.8f);
+    addSpr->setScale(0.6f);
+    m_buttonMenu->addChildAtPosition(CCMenuItemSpriteExtra::create(addSpr, this, menu_selector(FIRangesPopup::onAdd)),
+                                     Anchor::Center, {-55.f, -18.f});
+
+    m_endInput = TextInput::create(70.f, "0");
+    m_endInput->setLabel("Counter ends at");
+    m_endInput->setCommonFilter(CommonFilter::Float);
+    m_endInput->setString(fmt::format("{:g}", m_end));
+    m_endInput->setCallback([this](std::string const& txt) {
+        char* end = nullptr;
+        double v = std::strtod(txt.c_str(), &end);
+        m_end = (end != txt.c_str() && v >= 1) ? std::floor(v) : 0;
+        this->rebuildChips();
+    });
+    m_mainLayer->addChildAtPosition(m_endInput, Anchor::Center, {90.f, -18.f});
+
+    m_note = CCLabelBMFont::create("", "chatFont.fnt");
+    m_note->setScale(0.55f);
+    m_mainLayer->addChildAtPosition(m_note, Anchor::Center, {0.f, -50.f});
+
+    struct P { char const* name; int tag; };
+    P presets[] = {{"Default", 1}, {"1-3 + 4+", 2}, {"15-30", 3}};
+    float px = -110.f;
+    for (auto const& pr : presets) {
+        auto spr = ButtonSprite::create(pr.name, "bigFont.fnt", "GJ_button_04.png", 0.6f);
+        spr->setScale(0.55f);
+        auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(FIRangesPopup::onPreset));
+        btn->setTag(pr.tag);
+        m_buttonMenu->addChildAtPosition(btn, Anchor::Center, {px, -76.f});
+        px += 110.f;
+    }
+
+    auto saveSpr = ButtonSprite::create("Save", "goldFont.fnt", "GJ_button_01.png", 0.8f);
+    saveSpr->setScale(0.85f);
+    m_buttonMenu->addChildAtPosition(CCMenuItemSpriteExtra::create(saveSpr, this, menu_selector(FIRangesPopup::onSave)),
+                                     Anchor::Bottom, {0.f, 24.f});
+
+    this->rebuildChips();
+    return true;
+}
+
+void FIRangesPopup::rebuildChips() {
+    m_chips->removeAllChildren();
+    // old remove buttons
+    std::vector<CCNode*> old;
+    for (auto child : CCArrayExt<CCNode*>(m_buttonMenu->getChildren()))
+        if (child->getTag() >= kRemoveTagBase) old.push_back(child);
+    for (auto n : old) n->removeFromParent();
+
+    double scanned = scanMax();
+    double end = m_end >= 1 ? m_end : scanned;
+    auto buckets = makeBuckets(end, m_starts);
+
+    // lay the rows out in up to two lines
+    size_t perLine = buckets.size() > 7 ? (buckets.size() + 1) / 2 : buckets.size();
+    float gap = 46.f;
+    for (size_t i = 0; i < buckets.size(); i++) {
+        size_t line = perLine ? i / perLine : 0;
+        size_t col = perLine ? i % perLine : i;
+        size_t inLine = std::min(perLine, buckets.size() - line * perLine);
+        float x = (static_cast<float>(col) - (static_cast<float>(inLine) - 1.f) / 2.f) * gap;
+        float y = line == 0 ? 0.f : -34.f;
+        if (buckets.size() > perLine) y += 14.f;
+
+        auto box = CCLayerColor::create({0, 0, 0, 90}, 42.f, 22.f);
+        box->setPosition(x - 21.f, y - 11.f);
+        m_chips->addChild(box);
+        auto lbl = CCLabelBMFont::create(buckets[i].label.c_str(), "bigFont.fnt");
+        lbl->setColor(buckets[i].color);
+        lbl->limitLabelWidth(38.f, 0.45f, 0.2f);
+        lbl->setPosition(x, y);
+        m_chips->addChild(lbl);
+
+        // the first row (1) and the last row (N+) can't be removed
+        if (i > 0 && i + 1 < buckets.size()) {
+            auto x_ = CCSprite::createWithSpriteFrameName("GJ_deleteIcon_001.png");
+            x_->setScale(0.35f);
+            auto btn = CCMenuItemSpriteExtra::create(x_, this, menu_selector(FIRangesPopup::onRemove));
+            btn->setTag(kRemoveTagBase + static_cast<int>(buckets[i].lo));
+            m_buttonMenu->addChildAtPosition(btn, Anchor::Center, {x + 19.f, 40.f + y + 10.f});
+        }
+    }
+
+    std::string note;
+    if (m_end >= 1 && m_end > scanned + 1e-9)
+        note = fmt::format("Your scan only measured up to {:g} frames - set Max window to {:g} and scan again to see {:g}+", scanned, m_end, m_end);
+    else if (m_end >= 1)
+        note = fmt::format("Everything {:g} frames or more goes in the last row", m_end);
+    else
+        note = fmt::format("Counter ends at 0 = up to your Max window ({:g})", scanned);
+    m_note->setString(note.c_str());
+    m_note->setColor(m_end >= 1 && m_end > scanned + 1e-9 ? ccColor3B{255, 190, 80} : ccColor3B{220, 220, 220});
+    m_note->limitLabelWidth(360.f, 0.55f, 0.2f);
+}
+
+void FIRangesPopup::onAdd(CCObject*) {
+    auto txt = m_addInput->getString();
+    int v = std::atoi(txt.c_str());
+    if (v < 2) {
+        FLAlertLayer::create("Counter ranges", "Type a number of frames, 2 or more (1 is always the first row).", "OK")->show();
+        return;
+    }
+    m_starts.push_back(v);
+    m_starts = parseBucketStarts(joinStarts(m_starts));
+    m_addInput->setString("");
+    this->rebuildChips();
+}
+
+void FIRangesPopup::onRemove(CCObject* sender) {
+    int v = static_cast<CCNode*>(sender)->getTag() - kRemoveTagBase;
+    m_starts.erase(std::remove(m_starts.begin(), m_starts.end(), v), m_starts.end());
+    if (m_starts.empty()) m_starts = {1};
+    this->rebuildChips();
+}
+
+void FIRangesPopup::onPreset(CCObject* sender) {
+    switch (static_cast<CCNode*>(sender)->getTag()) {
+        case 1: m_starts = {1, 2, 3, 4, 5, 7, 9, 16}; m_end = 0; break;
+        case 2: m_starts = {1, 2, 3}; m_end = 4; break;
+        case 3: m_starts = {1, 2, 3, 4, 5, 7, 9, 15}; m_end = 31; break;
+        default: break;
+    }
+    m_endInput->setString(fmt::format("{:g}", m_end));
+    this->rebuildChips();
+}
+
+void FIRangesPopup::onSave(CCObject*) {
+    Mod::get()->setSettingValue<std::string>("counter-rows", joinStarts(m_starts));
+    Mod::get()->setSettingValue<double>("counter-max", m_end);
+    if (auto pl = PlayLayer::get())
+        if (auto ov = FIOverlay::find(pl)) ov->rebuild();
+    this->onClose(nullptr);
 }
 
 } // namespace fi

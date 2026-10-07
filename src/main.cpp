@@ -5,6 +5,7 @@
 #include <Geode/modify/GameStatsManager.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/PlayerObject.hpp>
 #include <Geode/ui/BasedButtonSprite.hpp>
 
 #include "Overlay.hpp"
@@ -53,13 +54,6 @@ class $modify(FIBaseLayer, GJBaseGameLayer) {
         auto& sc = ScanController::get();
         if (isScanLayer(this) && !sc.injecting()) return;
         GJBaseGameLayer::handleButton(down, button, isPlayer1);
-        if (sc.scanning()) return;
-        // your own click: count it and pop a circle where you did it
-        auto pl = PlayLayer::get();
-        if (pl && static_cast<GJBaseGameLayer*>(pl) == static_cast<GJBaseGameLayer*>(this)) {
-            bool twoPlayer = m_levelSettings && m_levelSettings->m_twoPlayerMode;
-            if (auto ov = FIOverlay::find(pl)) ov->onPlayerInput(down, button, twoPlayer && !isPlayer1);
-        }
     }
 };
 
@@ -154,6 +148,32 @@ class $modify(FIPlayLayer, PlayLayer) {
     void onExit() {
         ScanController::get().forget(this);
         PlayLayer::onExit();
+    }
+};
+
+// Your clicks, caught where the player itself gets them (works no matter which input path or mod sent them).
+static void onYourInput(PlayerObject* player, bool down, PlayerButton button) {
+    auto& sc = ScanController::get();
+    if (sc.scanning()) return;
+    auto pl = PlayLayer::get();
+    if (!pl || !player || player->m_isDead) return;  // the game releases buttons itself when you die
+    bool isP2 = player == pl->m_player2;
+    if (!isP2 && player != pl->m_player1) return;  // e.g. a trajectory preview's fake player
+    bool twoPlayer = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
+    if (isP2 && !twoPlayer) return;  // dual: one click goes to both players, count it once
+    if (auto ov = FIOverlay::find(pl)) ov->onPlayerInput(player, down, static_cast<int>(button), isP2);
+}
+
+class $modify(FIPlayer, PlayerObject) {
+    bool pushButton(PlayerButton button) {
+        bool ret = PlayerObject::pushButton(button);
+        onYourInput(this, true, button);
+        return ret;
+    }
+    bool releaseButton(PlayerButton button) {
+        bool ret = PlayerObject::releaseButton(button);
+        onYourInput(this, false, button);
+        return ret;
     }
 };
 

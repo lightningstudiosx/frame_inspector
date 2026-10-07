@@ -21,6 +21,7 @@ struct LevelResults {
     int offset = 0;
     bool endDetected = true;
     std::vector<EventResult> events;
+    int version = 2;          // 1 = scanned before v1.3 (no physics x / time per click)
 
     double framesOf(EventResult const& e) const { return e.windowTicks * fps / tps; }
     double maxFrames() const { return maxTicks * fps / tps; }

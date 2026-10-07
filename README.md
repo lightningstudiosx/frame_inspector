@@ -2,9 +2,12 @@
 
 You load a macro, the bot plays it and measures **how many frames of leeway every click and release has**. Then you can play the level yourself with those numbers shown on every click. Press **F7** to hide or show them.
 
-- A **marker on every click** with its frame window. Releases get smaller rings. Colours: red = 1 frame, orange = 2, yellow = 3, white = 4, green = 5-6, cyan = 7-8, purple = 9-15, blue = 16+. **Pink means under 1 frame.**
-- A **counter in the top left**: 16+, 9-15, 7-8, 5-6, 4, 3, 2, 1, plus a `<1` row.
-- In the **top right**: every click that's **harder than 1 frame** (like `0.25f`), with when it happens.
+- **Circles pop up where you click** (and release, but only releases that matter, like wave/ship/robot) with that click's frame window. Colours: red = 1 frame, orange = 2, yellow = 3, white = 4, green = 5-6, cyan = 7-8, purple = 9-15, blue = 16+. **Pink = under 1 frame.**
+- **A ding** when you hit a frame perfect (setting: how hard a click has to be, or your own sound).
+- **The counter in the top left goes up the moment you hit each click.** Pick your own rows with **Ranges** in the FI menu (e.g. 9-14, 15-30, 31+).
+- **Top right: "1 frames: N"** plus how many are under 1 frame, and a list of them.
+- **Every attempt** a banner says "<level> has N one frames".
+- **Click info line** (bottom left, can be turned off) says what each click matched — send a screenshot of it if something doesn't react.
 - **Max window**: you pick how far it measures. Anything bigger shows as "16+" (or whatever max you chose).
 - **Saved per level.** Next time you open the level, the markers are already there.
 
