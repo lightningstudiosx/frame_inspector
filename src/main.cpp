@@ -1,5 +1,6 @@
 // Frame Inspector - load a macro, let the bot measure every click's frame window, then play with the windows shown.
 #include <Geode/Geode.hpp>
+#include <Geode/binding/LevelSettingsObject.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/GameStatsManager.hpp>
 #include <Geode/modify/PauseLayer.hpp>
@@ -52,6 +53,13 @@ class $modify(FIBaseLayer, GJBaseGameLayer) {
         auto& sc = ScanController::get();
         if (isScanLayer(this) && !sc.injecting()) return;
         GJBaseGameLayer::handleButton(down, button, isPlayer1);
+        if (sc.scanning()) return;
+        // your own click: count it and pop a circle where you did it
+        auto pl = PlayLayer::get();
+        if (pl && static_cast<GJBaseGameLayer*>(pl) == static_cast<GJBaseGameLayer*>(this)) {
+            bool twoPlayer = m_levelSettings && m_levelSettings->m_twoPlayerMode;
+            if (auto ov = FIOverlay::find(pl)) ov->onPlayerInput(down, button, twoPlayer && !isPlayer1);
+        }
     }
 };
 
