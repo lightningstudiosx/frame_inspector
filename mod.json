@@ -1,0 +1,91 @@
+{
+	"geode": "5.10.1",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"id": "kai.frame-inspector",
+	"name": "Frame Inspector",
+	"version": "v1.0.0",
+	"developer": "Kai",
+	"description": "Load a macro, let the bot measure every click's frame window, then play with the windows shown in the level.",
+	"tags": ["gameplay", "utility", "interface"],
+	"dependencies": {
+		"geode.node-ids": ">=v1.23.3"
+	},
+	"settings": {
+		"display-title": { "type": "title", "name": "Display" },
+		"toggle-overlay": {
+			"type": "keybind",
+			"name": "Show / hide everything",
+			"description": "Hides or shows the markers, counter and hardest list while you play.",
+			"default": "F7",
+			"category": "gameplay"
+		},
+		"count-mode": {
+			"type": "string",
+			"name": "Counter counts",
+			"description": "Whole level: totals for the level. Passed this attempt: counts go up as you pass the clicks.",
+			"default": "Whole level",
+			"one-of": ["Whole level", "Passed this attempt"]
+		},
+		"show-releases": {
+			"type": "bool",
+			"name": "Show releases",
+			"description": "Releases get smaller markers. Turn off to only show clicks (they're usually huge windows on cube).",
+			"default": true
+		},
+		"marker-scale": {
+			"type": "float",
+			"name": "Marker size",
+			"default": 1.0,
+			"min": 0.3,
+			"max": 3.0,
+			"control": { "slider": true, "slider-step": 0.1, "arrows": false }
+		},
+		"marker-decimals": {
+			"type": "bool",
+			"name": "Decimals on markers",
+			"description": "Show 2.5 instead of 2. Windows under 1 frame always show decimals.",
+			"default": false
+		},
+		"hardest-count": {
+			"type": "int",
+			"name": "Rows in the hardest list",
+			"default": 6,
+			"min": 1,
+			"max": 20
+		},
+		"scan-title": { "type": "title", "name": "Scanning" },
+		"scan-releases": {
+			"type": "bool",
+			"name": "Scan releases",
+			"description": "Also measure releases (needed for wave/ship/swing). Turning this off makes scans faster.",
+			"default": true
+		},
+		"extra-survive-ticks": {
+			"type": "int",
+			"name": "Extra survive ticks",
+			"description": "A shifted click must keep you alive until your next click happens, plus this many ticks.",
+			"default": 0,
+			"min": 0,
+			"max": 480
+		},
+		"fast-scan": {
+			"type": "bool",
+			"name": "Fast scan",
+			"description": "Skip drawing level objects while the bot fast-forwards. Turn off if a scan behaves differently from normal play.",
+			"default": true
+		},
+		"scan-budget-ms": {
+			"type": "float",
+			"name": "Scan time per frame (ms)",
+			"description": "How long the bot works each frame. Higher = faster scan but laggier screen.",
+			"default": 14.0,
+			"min": 2.0,
+			"max": 200.0
+		}
+	}
+}
