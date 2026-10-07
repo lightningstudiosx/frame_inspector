@@ -40,6 +40,7 @@ protected:
         uint8_t button = 1;
         bool player2 = false;
         bool used = false;        // you already hit this one this attempt
+        double frames = 0;        // its window in frames
         std::string text;
         cocos2d::ccColor3B color;
     };
@@ -54,6 +55,7 @@ protected:
     void bump(int bucket, bool sub);
     void drawCircle(cocos2d::CCNode* parent, cocos2d::CCDrawNode* draw, Ev const& e, cocos2d::CCPoint at, bool animate);
     void showAttemptBanner();
+    void ding(Ev const& e);
     cocos2d::CCNode* playerParent();
 
     PlayLayer* m_pl = nullptr;
@@ -75,6 +77,7 @@ protected:
     std::vector<int> m_totals;                           // per bucket (+1 for "<1")
     std::vector<int> m_counts;                           // this attempt
     size_t m_passedIdx = 0;
+    std::vector<size_t> m_pending;   // clicks you hit that count once you've got past them
     int m_oneFrames = 0, m_subFrames = 0;
     std::vector<std::pair<float, cocos2d::CCNode*>> m_labels;  // ahead-marker labels sorted by x (only nearby ones drawn)
     size_t m_visLo = 0, m_visHi = 0;

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <Geode/binding/FMODAudioEngine.hpp>
 #include <Geode/binding/LevelSettingsObject.hpp>
 #include <Geode/binding/PlayLayer.hpp>
 #include <Geode/binding/PlayerObject.hpp>
@@ -18,6 +19,7 @@ constexpr char const* kOverlayID = "frame-inspector-overlay"_spr;
 constexpr char const* kMarkersID = "frame-inspector-markers"_spr;
 constexpr char const* kLiveID = "frame-inspector-live"_spr;
 constexpr float kMatchRange = 75.f;  // how far (in level units, 30 = one block) your click may be from the bot's
+constexpr float kPassMargin = 30.f;  // a hit click counts once you're a block past it (still alive)
 bool s_hidden = false;
 
 ccColor4F c4(ccColor3B c, float a) { return {c.r / 255.f, c.g / 255.f, c.b / 255.f, a}; }
@@ -109,7 +111,10 @@ void FIOverlay::rebuild() {
     if (!sc.results || sc.resultsLevelKey != ScanController::levelKey(m_pl)) return;
     auto const& r = *sc.results;
 
-    m_buckets = makeBuckets(r.maxFrames());
+    double displayMax = r.maxFrames();
+    double counterMax = Mod::get()->getSettingValue<double>("counter-max");
+    if (counterMax >= 1 && counterMax < displayMax) displayMax = counterMax;
+    m_buckets = makeBuckets(displayMax, parseBucketStarts(Mod::get()->getSettingValue<std::string>("counter-rows")));
     auto cm = Mod::get()->getSettingValue<std::string>("count-mode");
     m_countMode = cm == "Whole level" ? CountMode::Whole : cm == "Passed this attempt" ? CountMode::Passed : CountMode::AsYouClick;
     m_markerMode = Mod::get()->getSettingValue<std::string>("marker-mode") == "Always (show ahead)" ? MarkerMode::Always : MarkerMode::OnClick;
@@ -129,10 +134,12 @@ void FIOverlay::rebuild() {
         ev.player2 = e.player2;
         bool ok = e.status == EventStatus::Ok;
         double f = r.framesOf(e);
-        ev.bucket = ok ? bucketOf(m_buckets, f, e.capped) : -1;
+        bool overCap = e.capped || f >= std::floor(displayMax + 1e-9);
+        ev.frames = e.capped ? 1e9 : f;
+        ev.bucket = ok ? bucketOf(m_buckets, f, overCap) : -1;
         ev.sub = ok && !e.capped && f < 1.0;
         ev.color = !ok ? unreliableColor() : ev.sub ? subFrameColor() : m_buckets[static_cast<size_t>(ev.bucket)].color;
-        ev.text = windowText(r, e, decimals);
+        ev.text = ok && overCap ? fmt::format("{}+", static_cast<int>(std::floor(displayMax + 1e-9))) : windowText(r, e, decimals);
         if (e.button == 2) ev.text = "L" + ev.text;
         if (e.button == 3) ev.text = "R" + ev.text;
         if (ev.bucket >= 0) m_totals[static_cast<size_t>(ev.bucket)]++;
@@ -154,9 +161,21 @@ void FIOverlay::rebuild() {
     buildHardest(r);
     m_counts.assign(m_totals.size(), 0);
     m_passedIdx = 0;
+    m_pending.clear();
     refreshCounts();
     cullLabels();
     applyVisibility();
+}
+
+void FIOverlay::ding(Ev const& e) {
+    if (!Mod::get()->getSettingValue<bool>("ding")) return;
+    if (e.bucket < 0 || e.frames > Mod::get()->getSettingValue<double>("ding-max-frames") + 1e-9) return;
+    auto custom = Mod::get()->getSettingValue<std::filesystem::path>("ding-file");
+    std::error_code ec;
+    std::string path;
+    if (!custom.empty() && std::filesystem::exists(custom, ec)) path = geode::utils::string::pathToString(custom);
+    else path = e.down ? "ding.ogg"_spr : "ding-release.ogg"_spr;
+    if (auto fmod = FMODAudioEngine::get()) fmod->playEffect(path);
 }
 
 void FIOverlay::drawCircle(CCNode* parent, CCDrawNode* draw, Ev const& e, CCPoint c, bool animate) {
@@ -337,6 +356,7 @@ void FIOverlay::showAttemptBanner() {
 void FIOverlay::onReset() {
     m_passedIdx = 0;
     m_counts.assign(m_totals.size(), 0);
+    m_pending.clear();
     for (auto& e : m_events) e.used = false;
     if (m_live) m_live->removeAllChildren();
     refreshCounts();
@@ -366,12 +386,14 @@ void FIOverlay::onPlayerInput(bool down, int button, bool player2) {
     }
     if (!best) return;
     best->used = true;
-    if (m_countMode == CountMode::AsYouClick) bump(best->bucket, best->sub);
-    if (m_markerMode == MarkerMode::OnClick && m_live) {
+    // the counter only goes up once you've actually made it past this click
+    if (m_countMode == CountMode::AsYouClick) m_pending.push_back(static_cast<size_t>(best - m_events.data()));
+    if (m_markerMode == MarkerMode::OnClick && m_live && !s_hidden) {
         auto draw = CCDrawNode::create();
         m_live->addChild(draw);
         drawCircle(m_live, draw, *best, {px, py}, true);
     }
+    ding(*best);
 }
 
 void FIOverlay::cullLabels() {
@@ -392,6 +414,18 @@ void FIOverlay::cullLabels() {
 
 void FIOverlay::onPlayerProgress() {
     cullLabels();
+    if (!m_pending.empty() && m_pl->m_player1 && !m_pl->m_player1->m_isDead) {
+        float px = m_pl->m_player1->m_position.x;
+        auto it = std::remove_if(m_pending.begin(), m_pending.end(), [&](size_t i) {
+            auto const& e = m_events[i];
+            auto p = e.player2 && m_pl->m_player2 ? m_pl->m_player2 : m_pl->m_player1;
+            float x = p ? p->m_position.x : px;
+            if (x < e.x + kPassMargin) return false;
+            bump(e.bucket, e.sub);
+            return true;
+        });
+        m_pending.erase(it, m_pending.end());
+    }
     if (m_countMode != CountMode::Passed || m_events.empty() || !m_pl->m_player1) return;
     float px = m_pl->m_player1->m_position.x;
     size_t before = m_passedIdx;

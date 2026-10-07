@@ -34,7 +34,9 @@ struct Bucket {
 };
 
 // Buckets like the classic counter: 1, 2, 3, 4, 5-6, 7-8, 9-15, 16+ (top one follows the max window).
-std::vector<Bucket> makeBuckets(double maxFrames);
+// `starts` = first frame count of each row, e.g. {1,2,3,4,5,7,9,16}; rows at or above the max are merged into "max+".
+std::vector<Bucket> makeBuckets(double maxFrames, std::vector<int> const& starts);
+std::vector<int> parseBucketStarts(std::string const& text);  // "1,2,3,4,5,7,9,16" -> {1,2,...}
 int bucketOf(std::vector<Bucket> const& buckets, double frames, bool capped);
 cocos2d::ccColor3B subFrameColor();
 cocos2d::ccColor3B unreliableColor();

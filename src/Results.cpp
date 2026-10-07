@@ -1,31 +1,49 @@
 #include "Results.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 using namespace geode::prelude;
 
 namespace fi {
 
-std::vector<Bucket> makeBuckets(double maxFrames) {
-    struct Edge { double lo; cocos2d::ccColor3B color; };
+std::vector<int> parseBucketStarts(std::string const& text) {
+    std::vector<int> out;
+    int cur = -1;
+    for (char c : text + ",") {
+        if (c >= '0' && c <= '9') cur = (cur < 0 ? 0 : cur * 10) + (c - '0');
+        else if (cur >= 0) { if (cur >= 1 && cur < 100000) out.push_back(cur); cur = -1; }
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    if (out.empty() || out[0] != 1) out.insert(out.begin(), 1);
+    return out;
+}
+
+std::vector<Bucket> makeBuckets(double maxFrames, std::vector<int> const& startsIn) {
     // colours follow the usual frame-window counter: red = frame perfect ... blue = free
-    static Edge const edges[] = {
-        {1, {255, 70, 70}},     // 1
-        {2, {255, 150, 60}},    // 2
-        {3, {255, 222, 70}},    // 3
-        {4, {255, 255, 255}},   // 4
-        {5, {90, 230, 120}},    // 5-6
-        {7, {70, 225, 215}},    // 7-8
-        {9, {150, 130, 255}},   // 9-15
-        {16, {120, 190, 255}},  // 16+
+    static cocos2d::ccColor3B const palette[] = {
+        {255, 70, 70},    // 1
+        {255, 150, 60},   // 2
+        {255, 222, 70},   // 3
+        {255, 255, 255},  // 4
+        {90, 230, 120},   // 5-6
+        {70, 225, 215},   // 7-8
+        {150, 130, 255},  // 9-15
+        {255, 140, 200},  // extra rows
+        {190, 255, 110},
     };
+    constexpr size_t kPalette = sizeof(palette) / sizeof(palette[0]);
+    cocos2d::ccColor3B const topColor = {120, 190, 255};
+
+    auto starts = startsIn.empty() ? std::vector<int>{1, 2, 3, 4, 5, 7, 9, 16} : startsIn;
     double cap = std::max(1.0, std::floor(maxFrames + 1e-9));
     std::vector<Bucket> out;
-    for (auto const& e : edges) {
-        if (e.lo >= cap) break;
+    for (size_t i = 0; i < starts.size(); i++) {
+        if (starts[i] >= cap) break;
         Bucket b;
-        b.lo = e.lo;
-        b.color = e.color;
+        b.lo = starts[i];
+        b.color = palette[std::min(i, kPalette - 1)];
         out.push_back(b);
     }
     for (size_t i = 0; i < out.size(); i++) {
@@ -38,7 +56,7 @@ std::vector<Bucket> makeBuckets(double maxFrames) {
     top.lo = cap;
     top.hi = 1e18;
     top.label = fmt::format("{}+", static_cast<int>(cap));
-    top.color = edges[7].color;
+    top.color = topColor;
     out.push_back(top);
     return out;
 }

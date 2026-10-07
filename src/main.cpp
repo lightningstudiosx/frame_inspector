@@ -198,4 +198,9 @@ $on_mod(Loaded) {
         if (down && !repeat) FIOverlay::toggleHidden();
         return false;
     });
+    // changing a display setting in the mod menu updates the level right away
+    listenForAllSettingChanges([](std::string_view key, std::shared_ptr<SettingV3>) {
+        if (auto pl = PlayLayer::get())
+            if (auto ov = FIOverlay::find(pl)) ov->rebuild();
+    });
 }
